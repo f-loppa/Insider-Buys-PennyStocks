@@ -8,14 +8,20 @@ function formatNumber(num) {
     return parseFloat(numStr).toLocaleString('en-US');
 }
 
-// Parse value for sorting (remove commas and convert to number)
-function parseValue(value, column) {
-    if (!value || value === '') return 0;
-    const cleaned = value.toString().replace(/,/g, '');
-    if (column === 'trade_date') {
-        return new Date(cleaned).getTime();
-    }
-    return parseFloat(cleaned) || 0;
+// Normalize row data
+function normalizeRow(r) {
+    const parse = (val) => {
+        if (!val || val === '') return 0;
+        return parseFloat(val.toString().replace(/,/g, '')) || 0;
+    };
+
+    return {
+        ...r,
+        price: parse(r.price),
+        shares: parse(r.shares),
+        value: parse(r.value),
+        trade_date_ts: new Date(r.trade_date).getTime()
+    };
 }
 
 // Detect clusters and aggregate stats
@@ -26,8 +32,8 @@ function analyzeClusters(data) {
             clusters[item.ticker] = { count: 0, totalValue: 0, totalShares: 0 };
         }
         clusters[item.ticker].count++;
-        clusters[item.ticker].totalValue += parseValue(item.value, 'value');
-        clusters[item.ticker].totalShares += parseValue(item.shares, 'shares');
+        clusters[item.ticker].totalValue += item.value;
+        clusters[item.ticker].totalShares += item.shares;
     });
     return clusters;
 }
@@ -60,9 +66,16 @@ function sortData(column) {
     });
 
     // Sort the data
+    // Sort the data
     currentData.sort((a, b) => {
-        const aVal = parseValue(a[column], column);
-        const bVal = parseValue(b[column], column);
+        let aVal = a[column];
+        let bVal = b[column];
+
+        // Handle Trade Date specially using the pre-calculated timestamp
+        if (column === 'trade_date') {
+            aVal = a.trade_date_ts;
+            bVal = b.trade_date_ts;
+        }
 
         if (currentSort.direction === 'asc') {
             return aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
@@ -99,7 +112,7 @@ function sortByClusters() {
         }
 
         // Then by value desc
-        return parseValue(b.value, 'value') - parseValue(a.value, 'value');
+        return b.value - a.value;
     });
 
     renderTable();
@@ -151,7 +164,7 @@ function exportToCSV() {
 function renderHotPicks() {
     // Top 3 by Value
     const topByValue = [...currentData]
-        .sort((a, b) => parseValue(b.value, 'value') - parseValue(a.value, 'value'))
+        .sort((a, b) => b.value - a.value)
         .slice(0, 3);
 
     const topValueTbody = document.getElementById('top-value-tbody');
@@ -168,7 +181,7 @@ function renderHotPicks() {
 
     // 5 Most Recent
     const mostRecent = [...currentData]
-        .sort((a, b) => parseValue(b.trade_date, 'trade_date') - parseValue(a.trade_date, 'trade_date'))
+        .sort((a, b) => b.trade_date_ts - a.trade_date_ts)
         .slice(0, 5);
 
     const recentTbody = document.getElementById('recent-tbody');
@@ -193,7 +206,7 @@ function renderTable() {
 
     currentData.forEach(item => {
         const tr = document.createElement('tr');
-        const value = parseValue(item.value, 'value');
+        const value = item.value;
 
         // Color code based on value
         if (value >= 1000000) {
@@ -246,10 +259,10 @@ async function loadData() {
 
         // Handle both new object format and old array format (fallback)
         if (Array.isArray(jsonResponse)) {
-            currentData = jsonResponse;
+            currentData = jsonResponse.map(normalizeRow);
             updateTimestamp(); // fallback to current time
         } else {
-            currentData = jsonResponse.data || [];
+            currentData = (jsonResponse.data || []).map(normalizeRow);
             updateTimestamp(jsonResponse.lastUpdated);
         }
 
