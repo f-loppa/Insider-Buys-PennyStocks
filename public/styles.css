@@ -469,25 +469,12 @@ td:nth-child(6) {
   .hot-pick-card {
     margin: 0;
     /* Remove any margin that could cause overflow */
-  }
-
-  /* Extra support for small screens */
-  @media (max-width: 768px) {
-    .hot-picks-grid {
-      grid-template-columns: 1fr;
-      /* Force 1 column */
-      gap: 1rem;
-    }
-
-    .hot-pick-card {
-      width: 100%;
-      box-sizing: border-box;
-      /* Scale down slightly to fit tight screens without overflow */
-      transform: scale(0.95);
-      transform-origin: center top;
-      margin-bottom: -1rem;
-      /* Compensate for scale gap */
-    }
+    width: 100%;
+    box-sizing: border-box;
+    /* Scale down slightly to fit tight screens without overflow */
+    transform: scale(0.98);
+    /* Less aggressive scale */
+    transform-origin: center top;
   }
 
   .section-title {
@@ -666,6 +653,21 @@ td:nth-child(6) {
   box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
   pointer-events: auto;
   transition: transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  padding-top: 2rem;
+  /* Make space for close button */
+}
+
+.modal-close-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 1rem;
+  font-size: 1.5rem;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  line-height: 1;
+  padding: 0.5rem;
+  /* Touch target */
+  z-index: 101;
 }
 
 #mobile-tooltip-overlay.visible .cluster-tooltip {

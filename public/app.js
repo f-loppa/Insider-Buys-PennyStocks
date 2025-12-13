@@ -354,11 +354,27 @@ function attachMobileListeners() {
             // Get content
             const tooltipContent = cluster.querySelector('.cluster-tooltip');
             if (tooltipContent) {
-                overlay.innerHTML = `<div class="cluster-tooltip">${tooltipContent.innerHTML}</div>`;
+                // Prepend a close button to the content
+                overlay.innerHTML = `
+                    <div class="cluster-tooltip">
+                        <span class="modal-close-btn">&times;</span>
+                        ${tooltipContent.innerHTML}
+                    </div>`;
+
                 overlay.style.display = 'flex';
                 // Trigger reflow/frame for transition
                 requestAnimationFrame(() => {
                     overlay.classList.add('visible');
+                });
+
+                // Add listener to the NEW close button
+                const closeBtn = overlay.querySelector('.modal-close-btn');
+                closeBtn.addEventListener('click', (ev) => {
+                    ev.stopPropagation();
+                    overlay.classList.remove('visible');
+                    setTimeout(() => {
+                        overlay.style.display = 'none';
+                    }, 200);
                 });
             }
         });
