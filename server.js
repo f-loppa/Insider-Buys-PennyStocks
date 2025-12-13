@@ -8,8 +8,21 @@ const PORT = process.env.PORT || 3000;
 // Serve static files from the public directory
 app.use(express.static('public'));
 
+const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
+let cache = {
+    data: null,
+    lastUpdated: 0
+};
+
 app.get('/api/data', async (req, res) => {
     try {
+        // Check cache
+        if (cache.data && (Date.now() - cache.lastUpdated < CACHE_DURATION)) {
+            console.log('Serving from cache');
+            return res.json(cache.data);
+        }
+
+        console.log('Fetching new data from OpenInsider...');
         const response = await axios.get('http://openinsider.com/screener?s=&o=&pl=&ph=5&ll=&lh=&fd=730&fdr=&td=0&tdr=&fdlyl=&fdlyh=&daysago=&xp=1&vl=25&vh=&ocl=&och=&sic1=-1&sicl=100&sich=9999&grp=0&nfl=&nfh=&nil=&nih=&nol=&noh=&v2l=&v2h=&oc2l=&oc2h=&sortcol=0&cnt=100&page=1', {
             headers: {
                 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
@@ -38,6 +51,12 @@ app.get('/api/data', async (req, res) => {
                 value: clean(cells[12])
             });
         });
+
+        // Update cache
+        cache.data = rows;
+        cache.lastUpdated = Date.now();
+        console.log('Cache updated');
+
         res.json(rows);
     } catch (error) {
         console.error('Error fetching data:', error);
