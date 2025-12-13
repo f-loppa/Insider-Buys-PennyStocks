@@ -1,0 +1,14 @@
+{
+    "name": "scraper-website",
+    "version": "1.0.0",
+    "description": "Modern website that scrapes OpenInsider data",
+    "main": "server.js",
+    "scripts": {
+        "start": "node server.js"
+    },
+    "dependencies": {
+        "express": "^4.18.2",
+        "cheerio": "1.0.0-rc.10",
+        "axios": "^1.7.2"
+    }
+}
