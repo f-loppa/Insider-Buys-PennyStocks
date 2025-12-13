@@ -235,6 +235,8 @@ td:nth-child(6) {
   .container {
     padding: 1rem;
     border-radius: 12px;
+    overflow: hidden;
+    /* Prevent child overflow */
   }
 
   h1 {
@@ -461,6 +463,12 @@ td:nth-child(6) {
 @media (max-width: 768px) {
   .hot-picks-grid {
     grid-template-columns: 1fr;
+    gap: 1rem;
+  }
+
+  .hot-pick-card {
+    margin: 0;
+    /* Remove any margin that could cause overflow */
   }
 
   .section-title {
@@ -559,7 +567,7 @@ td:nth-child(6) {
   opacity: 0;
   position: absolute;
   bottom: 125%;
-  /* Position above badge */
+  /* Position above badge on desktop */
   left: 50%;
   transform: translateX(-50%) translateY(10px);
   background: rgba(22, 33, 62, 0.95);
@@ -573,6 +581,28 @@ td:nth-child(6) {
   z-index: 100;
   transition: all 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
   pointer-events: none;
+}
+
+/* Mobile: show tooltip below badge to prevent cutoff */
+@media (max-width: 768px) {
+  .cluster-tooltip {
+    bottom: auto;
+    top: 125%;
+    /* Position below badge */
+    transform: translateX(-50%) translateY(-10px);
+  }
+
+  .cluster-tooltip::after {
+    /* Flip arrow to point up */
+    top: auto;
+    bottom: 100%;
+    border-color: transparent transparent rgba(22, 33, 62, 0.95) transparent;
+  }
+
+  .cluster-badge-container:hover .cluster-tooltip,
+  .cluster-badge-container.tooltip-active .cluster-tooltip {
+    transform: translateX(-50%) translateY(0);
+  }
 }
 
 .cluster-tooltip::after {
