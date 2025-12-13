@@ -24,6 +24,18 @@ function normalizeRow(r) {
     };
 }
 
+// Security: Escape HTML to prevent XSS
+function escapeHtml(text) {
+    if (!text) return '';
+    return text
+        .toString()
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;")
+        .replace(/'/g, "&#039;");
+}
+
 // Detect clusters and aggregate stats
 function analyzeClusters(data) {
     const clusters = {};
@@ -172,9 +184,9 @@ function renderHotPicks() {
     topByValue.forEach(item => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-      <td><a href="https://www.tradingview.com/chart/?symbol=${item.ticker}" target="_blank" rel="noopener noreferrer" class="ticker-link">${item.ticker}</a></td>
+      <td><a href="https://www.tradingview.com/chart/?symbol=${escapeHtml(item.ticker)}" target="_blank" rel="noopener noreferrer" class="ticker-link">${escapeHtml(item.ticker)}</a></td>
       <td style="color: #4ade80; font-weight: 600;">$${formatNumber(item.value)}</td>
-      <td style="color: #b0b0b0; font-size: 0.8125rem;">${item.trade_date}</td>
+      <td style="color: #b0b0b0; font-size: 0.8125rem;">${escapeHtml(item.trade_date)}</td>
     `;
         topValueTbody.appendChild(tr);
     });
@@ -189,9 +201,9 @@ function renderHotPicks() {
     mostRecent.forEach(item => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-      <td><a href="https://www.tradingview.com/chart/?symbol=${item.ticker}" target="_blank" rel="noopener noreferrer" class="ticker-link">${item.ticker}</a></td>
-      <td style="color: #d0d0d0;"><a href="https://www.google.com/search?q=${encodeURIComponent(item.company + ' stock news')}" target="_blank" rel="noopener noreferrer" class="company-link">${item.company.length > 25 ? item.company.substring(0, 25) + '...' : item.company}</a></td>
-      <td style="color: #b0b0b0; font-size: 0.8125rem;">${item.trade_date}</td>
+      <td><a href="https://www.tradingview.com/chart/?symbol=${escapeHtml(item.ticker)}" target="_blank" rel="noopener noreferrer" class="ticker-link">${escapeHtml(item.ticker)}</a></td>
+      <td style="color: #d0d0d0;"><a href="https://www.google.com/search?q=${encodeURIComponent(item.company + ' stock news')}" target="_blank" rel="noopener noreferrer" class="company-link">${escapeHtml(item.company.length > 25 ? item.company.substring(0, 25) + '...' : item.company)}</a></td>
+      <td style="color: #b0b0b0; font-size: 0.8125rem;">${escapeHtml(item.trade_date)}</td>
     `;
         recentTbody.appendChild(tr);
     });
@@ -230,9 +242,9 @@ function renderTable() {
         }
 
         tr.innerHTML = `
-      <td>${item.trade_date}</td>
-      <td><a href="https://www.tradingview.com/chart/?symbol=${item.ticker}" target="_blank" rel="noopener noreferrer" class="ticker-link">${item.ticker}</a>${clusterBadge}</td>
-      <td><a href="https://www.google.com/search?q=${encodeURIComponent(item.company + ' stock news')}" target="_blank" rel="noopener noreferrer" class="company-link">${item.company}</a></td>
+      <td>${escapeHtml(item.trade_date)}</td>
+      <td><a href="https://www.tradingview.com/chart/?symbol=${escapeHtml(item.ticker)}" target="_blank" rel="noopener noreferrer" class="ticker-link">${escapeHtml(item.ticker)}</a>${clusterBadge}</td>
+      <td><a href="https://www.google.com/search?q=${encodeURIComponent(item.company + ' stock news')}" target="_blank" rel="noopener noreferrer" class="company-link">${escapeHtml(item.company)}</a></td>
       <td>${formatNumber(item.price)}</td>
       <td>${formatNumber(item.shares)}</td>
 
