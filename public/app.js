@@ -318,15 +318,15 @@ document.addEventListener('DOMContentLoaded', async () => {
 
 // Mobile Interaction Logic
 function attachMobileListeners() {
-    // Only run if screen width is like mobile
-    if (window.innerWidth > 768) return;
+    // Check if we are on a mobile device
+    if (!window.matchMedia("(max-width: 768px)").matches) return;
 
     // Row Tap Logic
     const rows = document.querySelectorAll('tbody tr');
     rows.forEach(row => {
         row.addEventListener('click', (e) => {
-            // Don't trigger if clicking a link or button directly
-            if (e.target.tagName === 'A' || e.target.closest('button') || e.target.closest('.cluster-badge-container')) {
+            // Do NOT toggle when clicking links/buttons/badges inside the row
+            if (e.target.closest('a, button, .cluster-badge-container')) {
                 return;
             }
             // Toggle active state
@@ -344,7 +344,7 @@ function attachMobileListeners() {
     const clusters = document.querySelectorAll('.cluster-badge-container');
     clusters.forEach(cluster => {
         cluster.addEventListener('click', (e) => {
-            e.stopPropagation(); // prevent row click and document click
+            e.stopPropagation(); // so badge taps don't trigger row taps
 
             // Close others
             clusters.forEach(c => {
