@@ -471,6 +471,21 @@ td:nth-child(6) {
     /* Remove any margin that could cause overflow */
   }
 
+  /* Extra support for small screens */
+  @media (max-width: 480px) {
+    .hot-picks-grid {
+      grid-template-columns: 1fr;
+      /* Force 1 column */
+      gap: 1rem;
+    }
+
+    .hot-pick-card {
+      width: 100%;
+      box-sizing: border-box;
+      /* Ensure padding is inside width */
+    }
+  }
+
   .section-title {
     font-size: 1.5rem;
   }
@@ -583,25 +598,43 @@ td:nth-child(6) {
   pointer-events: none;
 }
 
-/* Mobile: show tooltip below badge to prevent cutoff */
+/* Mobile: show tooltip as a fixed popup centered on screen */
 @media (max-width: 768px) {
   .cluster-tooltip {
+    /* Reset absolute positioning */
     bottom: auto;
-    top: 125%;
-    /* Position below badge */
-    transform: translateX(-50%) translateY(-10px);
+    left: 50%;
+    top: 50%;
+    /* Center vertically */
+    transform: translate(-50%, -50%) scale(0.95);
+    /* Center horizontally + start slightly small */
+
+    /* Fixed positioning to escape container clipping */
+    position: fixed;
+    width: 90vw;
+    /* Wide but with margins */
+    max-width: 320px;
+    z-index: 9999;
+    /* Ensure it's on top of everything */
+
+    /* Box Styling */
+    box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+    border: 1px solid rgba(255, 255, 255, 0.15);
+    background: rgba(22, 33, 62, 0.98);
   }
 
+  /* Hide the arrow on mobile since it's a popup */
   .cluster-tooltip::after {
-    /* Flip arrow to point up */
-    top: auto;
-    bottom: 100%;
-    border-color: transparent transparent rgba(22, 33, 62, 0.95) transparent;
+    display: none;
   }
 
+  /* Visible State */
   .cluster-badge-container:hover .cluster-tooltip,
   .cluster-badge-container.tooltip-active .cluster-tooltip {
-    transform: translateX(-50%) translateY(0);
+    /* Override desktop hover transforms */
+    transform: translate(-50%, -50%) scale(1);
+    visibility: visible;
+    opacity: 1;
   }
 }
 
