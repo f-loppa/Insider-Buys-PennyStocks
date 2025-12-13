@@ -482,7 +482,11 @@ td:nth-child(6) {
     .hot-pick-card {
       width: 100%;
       box-sizing: border-box;
-      /* Ensure padding is inside width */
+      /* Scale down slightly to fit tight screens without overflow */
+      transform: scale(0.95);
+      transform-origin: center top;
+      margin-bottom: -1rem;
+      /* Compensate for scale gap */
     }
   }
 
@@ -646,6 +650,8 @@ td:nth-child(6) {
 
 #mobile-tooltip-overlay .cluster-tooltip {
   /* Reset positioning for modal use */
+  display: block !important;
+  /* Force visible inside modal */
   position: relative;
   bottom: auto;
   left: auto;
