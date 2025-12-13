@@ -219,27 +219,117 @@ td:nth-child(6) {
 
 @media (max-width: 768px) {
   body {
-    padding: 1rem 0.5rem;
+    padding: 0.5rem;
   }
 
   .container {
-    padding: 1.5rem;
-    border-radius: 16px;
+    padding: 1rem;
+    border-radius: 12px;
   }
 
   h1 {
-    font-size: 1.75rem;
-    margin-bottom: 1.5rem;
+    font-size: 1.5rem;
+    margin-bottom: 1.25rem;
   }
 
-  th,
-  td {
-    padding: 0.625rem 0.75rem;
-    font-size: 0.8125rem;
+  /* Stack buttons */
+  .refresh-section {
+    flex-direction: column;
+    width: 100%;
+    gap: 0.75rem;
   }
 
-  th {
+  .refresh-btn {
+    width: 100%;
+    margin-left: 0 !important;
+    /* Override inline styles if any */
+  }
+
+  /* Card View for Main Data Table */
+  #data-table thead {
+    display: none;
+  }
+
+  #data-table tbody,
+  #data-table tr,
+  #data-table td {
+    display: block;
+    width: 100%;
+  }
+
+  #data-table tr {
+    margin-bottom: 1rem;
+    background: rgba(255, 255, 255, 0.05);
+    /* distinct card bg */
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 12px;
+    padding: 0.5rem;
+  }
+
+  #data-table td {
+    text-align: right;
+    padding: 0.5rem 0.5rem;
+    position: relative;
+    padding-left: 50%;
+    /* Space for label */
+    border-bottom: 1px solid rgba(255, 255, 255, 0.03);
+    min-height: 2rem;
+    display: flex;
+    justify-content: flex-end;
+    align-items: center;
+  }
+
+  #data-table td:last-child {
+    border-bottom: none;
+  }
+
+  /* Add Labels */
+  #data-table td::before {
+    content: attr(data-label);
+    position: absolute;
+    left: 0.5rem;
+    width: 45%;
+    text-align: left;
+    font-weight: 600;
+    color: #888;
     font-size: 0.75rem;
+    text-transform: uppercase;
+  }
+
+  /* Specific labels based on nth-child if we don't have data-label attr */
+  /* Trade Date */
+  #data-table td:nth-of-type(1)::before {
+    content: "Trade Date";
+  }
+
+  /* Ticker */
+  #data-table td:nth-of-type(2)::before {
+    content: "Ticker";
+  }
+
+  /* Company */
+  #data-table td:nth-of-type(3)::before {
+    content: "Company";
+  }
+
+  /* Price */
+  #data-table td:nth-of-type(4)::before {
+    content: "Price";
+  }
+
+  /* Shares */
+  #data-table td:nth-of-type(5)::before {
+    content: "Shares";
+  }
+
+  /* Value */
+  #data-table td:nth-of-type(6)::before {
+    content: "Value";
+  }
+
+  /* Adjust font sizes for mobile card */
+  #data-table td {
+    font-size: 0.9375rem;
   }
 }
 
