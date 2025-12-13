@@ -19,7 +19,10 @@ app.get('/api/data', async (req, res) => {
         // Check cache
         if (cache.data && (Date.now() - cache.lastUpdated < CACHE_DURATION)) {
             console.log('Serving from cache');
-            return res.json(cache.data);
+            return res.json({
+                lastUpdated: cache.lastUpdated,
+                data: cache.data
+            });
         }
 
         console.log('Fetching new data from OpenInsider...');
@@ -57,7 +60,10 @@ app.get('/api/data', async (req, res) => {
         cache.lastUpdated = Date.now();
         console.log('Cache updated');
 
-        res.json(rows);
+        res.json({
+            lastUpdated: cache.lastUpdated,
+            data: rows
+        });
     } catch (error) {
         console.error('Error fetching data:', error);
         res.status(500).json({ error: 'Failed to fetch data' });

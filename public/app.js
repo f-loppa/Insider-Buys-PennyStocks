@@ -33,8 +33,8 @@ function analyzeClusters(data) {
 }
 
 // Update last updated timestamp
-function updateTimestamp() {
-    const now = new Date();
+function updateTimestamp(timestamp) {
+    const now = timestamp ? new Date(timestamp) : new Date();
     const timeStr = now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
     document.getElementById('last-updated').textContent = `Last updated: ${timeStr}`;
 }
@@ -242,11 +242,19 @@ async function loadData() {
 
         const response = await fetch('/api/data');
         if (!response.ok) throw new Error('Network response was not ok');
-        currentData = await response.json();
+        const jsonResponse = await response.json();
+
+        // Handle both new object format and old array format (fallback)
+        if (Array.isArray(jsonResponse)) {
+            currentData = jsonResponse;
+            updateTimestamp(); // fallback to current time
+        } else {
+            currentData = jsonResponse.data || [];
+            updateTimestamp(jsonResponse.lastUpdated);
+        }
 
         renderHotPicks();
         renderTable();
-        updateTimestamp();
 
         loadingEl.classList.add('hidden');
         hotPicksEl.classList.remove('hidden');
