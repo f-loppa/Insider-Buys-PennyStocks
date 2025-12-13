@@ -184,9 +184,9 @@ function renderHotPicks() {
     topByValue.forEach(item => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-      <td><a href="https://www.tradingview.com/chart/?symbol=${escapeHtml(item.ticker)}" target="_blank" rel="noopener noreferrer" class="ticker-link">${escapeHtml(item.ticker)}</a></td>
-      <td style="color: #4ade80; font-weight: 600;">$${formatNumber(item.value)}</td>
-      <td style="color: #b0b0b0; font-size: 0.8125rem;">${escapeHtml(item.trade_date)}</td>
+      <td data-label="Ticker"><a href="https://www.tradingview.com/chart/?symbol=${escapeHtml(item.ticker)}" target="_blank" rel="noopener noreferrer" class="ticker-link">${escapeHtml(item.ticker)}</a></td>
+      <td data-label="Value" style="color: #4ade80; font-weight: 600;">$${formatNumber(item.value)}</td>
+      <td data-label="Date" style="color: #b0b0b0; font-size: 0.8125rem;">${escapeHtml(item.trade_date)}</td>
     `;
         topValueTbody.appendChild(tr);
     });
@@ -201,9 +201,9 @@ function renderHotPicks() {
     mostRecent.forEach(item => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-      <td><a href="https://www.tradingview.com/chart/?symbol=${escapeHtml(item.ticker)}" target="_blank" rel="noopener noreferrer" class="ticker-link">${escapeHtml(item.ticker)}</a></td>
-      <td style="color: #d0d0d0;"><a href="https://www.google.com/search?q=${encodeURIComponent(item.company + ' stock news')}" target="_blank" rel="noopener noreferrer" class="company-link">${escapeHtml(item.company.length > 25 ? item.company.substring(0, 25) + '...' : item.company)}</a></td>
-      <td style="color: #b0b0b0; font-size: 0.8125rem;">${escapeHtml(item.trade_date)}</td>
+      <td data-label="Ticker"><a href="https://www.tradingview.com/chart/?symbol=${escapeHtml(item.ticker)}" target="_blank" rel="noopener noreferrer" class="ticker-link">${escapeHtml(item.ticker)}</a></td>
+      <td data-label="Company" style="color: #d0d0d0;"><a href="https://www.google.com/search?q=${encodeURIComponent(item.company + ' stock news')}" target="_blank" rel="noopener noreferrer" class="company-link">${escapeHtml(item.company.length > 25 ? item.company.substring(0, 25) + '...' : item.company)}</a></td>
+      <td data-label="Date" style="color: #b0b0b0; font-size: 0.8125rem;">${escapeHtml(item.trade_date)}</td>
     `;
         recentTbody.appendChild(tr);
     });
@@ -242,16 +242,19 @@ function renderTable() {
         }
 
         tr.innerHTML = `
-      <td>${escapeHtml(item.trade_date)}</td>
-      <td><a href="https://www.tradingview.com/chart/?symbol=${escapeHtml(item.ticker)}" target="_blank" rel="noopener noreferrer" class="ticker-link">${escapeHtml(item.ticker)}</a>${clusterBadge}</td>
-      <td><a href="https://www.google.com/search?q=${encodeURIComponent(item.company + ' stock news')}" target="_blank" rel="noopener noreferrer" class="company-link">${escapeHtml(item.company)}</a></td>
-      <td>${formatNumber(item.price)}</td>
-      <td>${formatNumber(item.shares)}</td>
+      <td data-label="Trade Date">${escapeHtml(item.trade_date)}</td>
+      <td data-label="Ticker"><a href="https://www.tradingview.com/chart/?symbol=${escapeHtml(item.ticker)}" target="_blank" rel="noopener noreferrer" class="ticker-link">${escapeHtml(item.ticker)}</a>${clusterBadge}</td>
+      <td data-label="Company"><a href="https://www.google.com/search?q=${encodeURIComponent(item.company + ' stock news')}" target="_blank" rel="noopener noreferrer" class="company-link">${escapeHtml(item.company)}</a></td>
+      <td data-label="Price">${formatNumber(item.price)}</td>
+      <td data-label="Shares">${formatNumber(item.shares)}</td>
 
-      <td>$${formatNumber(item.value)}</td>
+      <td data-label="Value">$${formatNumber(item.value)}</td>
     `;
         tbody.appendChild(tr);
     });
+
+    // Re-attach mobile listeners after render
+    attachMobileListeners();
 }
 
 // Load data from API
@@ -311,4 +314,51 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Add export button handler
     document.getElementById('export-btn').addEventListener('click', exportToCSV);
+});
+
+// Mobile Interaction Logic
+function attachMobileListeners() {
+    // Only run if screen width is like mobile
+    if (window.innerWidth > 768) return;
+
+    // Row Tap Logic
+    const rows = document.querySelectorAll('tbody tr');
+    rows.forEach(row => {
+        row.addEventListener('click', (e) => {
+            // Don't trigger if clicking a link or button directly
+            if (e.target.tagName === 'A' || e.target.closest('button') || e.target.closest('.cluster-badge-container')) {
+                return;
+            }
+            // Toggle active state
+            if (row.classList.contains('is-active')) {
+                row.classList.remove('is-active');
+            } else {
+                // Remove active from other rows
+                rows.forEach(r => r.classList.remove('is-active'));
+                row.classList.add('is-active');
+            }
+        });
+    });
+
+    // Cluster Badge Logic
+    const clusters = document.querySelectorAll('.cluster-badge-container');
+    clusters.forEach(cluster => {
+        cluster.addEventListener('click', (e) => {
+            e.stopPropagation(); // prevent row click and document click
+
+            // Close others
+            clusters.forEach(c => {
+                if (c !== cluster) c.classList.remove('tooltip-active');
+            });
+
+            // Toggle current
+            cluster.classList.toggle('tooltip-active');
+        });
+    });
+}
+
+// Close tooltips when clicking outside
+document.addEventListener('click', () => {
+    const activeClusters = document.querySelectorAll('.cluster-badge-container.tooltip-active');
+    activeClusters.forEach(c => c.classList.remove('tooltip-active'));
 });
