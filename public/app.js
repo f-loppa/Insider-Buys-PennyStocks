@@ -340,24 +340,43 @@ function attachMobileListeners() {
         });
     });
 
-    // Cluster Badge Logic
+    // Cluster Badge Logic (Global Modal)
     const clusters = document.querySelectorAll('.cluster-badge-container');
+    const overlay = document.getElementById('mobile-tooltip-overlay');
+
+    // Clean up old listeners (simple way is just to replace nodes, but for now assuming this runs once or we're careful. `attachMobileListeners` is called on load. JS listeners prevent dups?)
+    // actually renderTable calls it again. using new elements.
+
     clusters.forEach(cluster => {
         cluster.addEventListener('click', (e) => {
             e.stopPropagation(); // so badge taps don't trigger row taps
 
-            // Close others
-            clusters.forEach(c => {
-                if (c !== cluster) c.classList.remove('tooltip-active');
-            });
-
-            // Toggle current
-            cluster.classList.toggle('tooltip-active');
+            // Get content
+            const tooltipContent = cluster.querySelector('.cluster-tooltip');
+            if (tooltipContent) {
+                overlay.innerHTML = `<div class="cluster-tooltip">${tooltipContent.innerHTML}</div>`;
+                overlay.style.display = 'flex';
+                // Trigger reflow/frame for transition
+                requestAnimationFrame(() => {
+                    overlay.classList.add('visible');
+                });
+            }
         });
     });
 }
 
-// Close tooltips when clicking outside
+// Global Modal Logic (Initialize once)
+const overlay = document.getElementById('mobile-tooltip-overlay');
+if (overlay) {
+    overlay.addEventListener('click', () => {
+        overlay.classList.remove('visible');
+        setTimeout(() => {
+            overlay.style.display = 'none';
+        }, 200); // Wait for transition
+    });
+}
+
+// Close tooltips when clicking outside (Desktop only mostly, but good cleanup)
 document.addEventListener('click', () => {
     const activeClusters = document.querySelectorAll('.cluster-badge-container.tooltip-active');
     activeClusters.forEach(c => c.classList.remove('tooltip-active'));
