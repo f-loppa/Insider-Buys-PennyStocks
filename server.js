@@ -1,6 +1,8 @@
 const express = require('express');
 const axios = require('axios');
 const cheerio = require('cheerio');
+const fs = require('fs');
+const path = require('path');
 
 const app = express();
 const PORT = process.env.PORT || 3000;
@@ -8,12 +10,28 @@ const PORT = process.env.PORT || 3000;
 // Serve static files from the public directory
 app.use(express.static('public'));
 
+const CACHE_FILE = path.join(__dirname, 'cache.json');
 const CACHE_DURATION = 5 * 60 * 1000; // 5 minutes
 let cache = {
     data: null,
-    lastUpdated: 0
+    lastUpdated: 0,
+    mocked: false
 };
 let inflight = null;
+
+// Load cache from disk on startup if it exists
+if (fs.existsSync(CACHE_FILE)) {
+    try {
+        const fileContent = fs.readFileSync(CACHE_FILE, 'utf8');
+        const parsed = JSON.parse(fileContent);
+        if (parsed && parsed.data) {
+            cache = parsed;
+            console.log('Loaded cache from disk:', new Date(cache.lastUpdated).toLocaleString());
+        }
+    } catch (e) {
+        console.error('Error reading cache file on startup:', e.message);
+    }
+}
 
 async function fetchFromOpenInsider() {
     console.log('Fetching new data from OpenInsider...');
@@ -46,6 +64,8 @@ async function fetchFromOpenInsider() {
                 trade_date: cells[2] || '',
                 ticker: ticker,
                 company: cells[4] || '',
+                insider_name: cells[5] || '',
+                insider_title: cells[6] || '',
                 price: clean(cells[8]),
                 shares: clean(cells[9]),
                 value: clean(cells[12])
@@ -63,6 +83,129 @@ async function fetchFromOpenInsider() {
     return rows;
 }
 
+const MOCK_DATA = [
+    {
+        trade_date: '2026-07-06',
+        ticker: 'ABCD',
+        company: 'Acme Biotech Corp',
+        insider_name: 'Sarah Chen',
+        insider_title: 'Chief Executive Officer, Pres',
+        price: '2.14',
+        shares: '192500',
+        value: '412000'
+    },
+    {
+        trade_date: '2026-07-06',
+        ticker: 'ABCD',
+        company: 'Acme Biotech Corp',
+        insider_name: 'John Miller',
+        insider_title: 'Chief Financial Officer, VP',
+        price: '2.14',
+        shares: '50000',
+        value: '107000'
+    },
+    {
+        trade_date: '2026-07-05',
+        ticker: 'WXYZ',
+        company: 'Wexford Mining Ltd',
+        insider_name: 'Robert Vance',
+        insider_title: 'Director',
+        price: '0.953',
+        shares: '100000',
+        value: '95300'
+    },
+    {
+        trade_date: '2026-07-04',
+        ticker: 'PLTR',
+        company: 'Palantir Technologies',
+        insider_name: 'Alex Karp',
+        insider_title: 'CEO, Director',
+        price: '16.50',
+        shares: '303030',
+        value: '5000000'
+    },
+    {
+        trade_date: '2026-07-04',
+        ticker: 'GOOG',
+        company: 'Alphabet Inc',
+        insider_name: 'Sundar Pichai',
+        insider_title: 'CEO',
+        price: '140.00',
+        shares: '10000',
+        value: '1400000'
+    },
+    {
+        trade_date: '2026-07-03',
+        ticker: 'TSLA',
+        company: 'Tesla Inc',
+        insider_name: 'Elon Musk',
+        insider_title: 'CEO, 10% Owner',
+        price: '180.00',
+        shares: '55555',
+        value: '1000000'
+    },
+    {
+        trade_date: '2026-07-03',
+        ticker: 'MSFT',
+        company: 'Microsoft Corp',
+        insider_name: 'Satya Nadella',
+        insider_title: 'Chairman, CEO',
+        price: '380.00',
+        shares: '5000',
+        value: '1900000'
+    },
+    {
+        trade_date: '2026-07-02',
+        ticker: 'NVDA',
+        company: 'NVIDIA Corp',
+        insider_name: 'Jensen Huang',
+        insider_title: 'CEO, President',
+        price: '480.00',
+        shares: '25000',
+        value: '12000000'
+    },
+    {
+        trade_date: '2026-07-01',
+        ticker: 'AAPL',
+        company: 'Apple Inc',
+        insider_name: 'Tim Cook',
+        insider_title: 'Chief Executive Officer',
+        price: '185.00',
+        shares: '100000',
+        value: '18500000'
+    },
+    {
+        trade_date: '2026-06-30',
+        ticker: 'AMZN',
+        company: 'Amazon.com Inc',
+        insider_name: 'Andy Jassy',
+        insider_title: 'President & CEO',
+        price: '150.00',
+        shares: '33333',
+        value: '5000000'
+    },
+    {
+        trade_date: '2026-06-29',
+        ticker: 'META',
+        company: 'Meta Platforms Inc',
+        insider_name: 'Mark Zuckerberg',
+        insider_title: 'COB and CEO',
+        price: '350.00',
+        shares: '14285',
+        value: '5000000'
+    },
+    {
+        trade_date: '2026-06-28',
+        ticker: 'NFLX',
+        company: 'Netflix Inc',
+        insider_name: 'Ted Sarandos',
+        insider_title: 'Co-CEO',
+        price: '450.00',
+        shares: '2222',
+        value: '1000000'
+    }
+];
+
 app.get('/api/data', async (req, res) => {
     try {
         // Serve from fresh cache if available and not expired
@@ -70,7 +213,8 @@ app.get('/api/data', async (req, res) => {
             console.log('Serving from cache');
             return res.json({
                 lastUpdated: cache.lastUpdated,
-                data: cache.data
+                data: cache.data,
+                mocked: cache.mocked
             });
         }
 
@@ -80,7 +224,15 @@ app.get('/api/data', async (req, res) => {
                 .then(rows => {
                     cache.data = rows;
                     cache.lastUpdated = Date.now();
+                    cache.mocked = false;
                     console.log('Cache successfully updated');
+                    
+                    // Save the updated cache to disk
+                    try {
+                        fs.writeFileSync(CACHE_FILE, JSON.stringify(cache), 'utf8');
+                    } catch (e) {
+                        console.error('Failed to write cache file to disk:', e.message);
+                    }
                     return rows;
                 })
                 .finally(() => {
@@ -94,7 +246,8 @@ app.get('/api/data', async (req, res) => {
 
         res.json({
             lastUpdated: cache.lastUpdated,
-            data: rows
+            data: rows,
+            mocked: cache.mocked
         });
     } catch (error) {
         console.error('Error fetching data:', error.message);
@@ -105,7 +258,22 @@ app.get('/api/data', async (req, res) => {
             return res.json({
                 lastUpdated: cache.lastUpdated,
                 data: cache.data,
-                stale: true
+                stale: true,
+                mocked: cache.mocked
+            });
+        }
+        
+        // If there is no cache yet, fall back to mock data ONLY in development (local test environments)
+        if (process.env.NODE_ENV !== 'production') {
+            console.log('OpenInsider is unreachable and cache is empty. Serving mock data fallback.');
+            cache.data = MOCK_DATA;
+            cache.lastUpdated = Date.now();
+            cache.mocked = true;
+            return res.json({
+                lastUpdated: cache.lastUpdated,
+                data: cache.data,
+                stale: true,
+                mocked: true
             });
         }
         

@@ -1,5 +1,6 @@
 let currentData = [];
 let currentSort = { column: null, direction: null };
+let cSuiteFilterActive = false;
 
 // Format number with commas (guarded against NaN)
 function formatNumber(num) {
@@ -35,6 +36,47 @@ function escapeHtml(text) {
         .replace(/>/g, "&gt;")
         .replace(/"/g, "&quot;")
         .replace(/'/g, "&#039;");
+}
+
+// Get initials from insider name for avatar
+function getInitials(name) {
+    if (!name) return 'IN';
+    const parts = name.split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+        return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return name.substring(0, 2).toUpperCase();
+}
+
+// Normalize raw title to badge and full string
+function normalizeTitle(raw) {
+    const full = raw || '';
+    const cleanRaw = full.toUpperCase();
+    
+    let badge = '';
+    if (cleanRaw.includes('CEO')) {
+        badge = 'CEO';
+    } else if (cleanRaw.includes('CFO')) {
+        badge = 'CFO';
+    } else if (cleanRaw.includes('COO')) {
+        badge = 'COO';
+    } else if (cleanRaw.includes('PRES')) {
+        badge = 'PRES';
+    } else if (cleanRaw.includes('CHAIRMAN') || cleanRaw.includes('CHAIR')) {
+        badge = 'CHAIR';
+    } else if (cleanRaw.includes('EVP') || cleanRaw.includes('SVP') || cleanRaw.includes('VP') || cleanRaw.includes('VICE PRESIDENT')) {
+        badge = 'VP';
+    } else if (cleanRaw.includes('DIRECTOR')) {
+        badge = 'DIR';
+    } else if (cleanRaw.includes('10%')) {
+        badge = '10%';
+    } else {
+        // fallback first token uppercased (max 5 chars)
+        const firstToken = full.split(/[\s,]+/)[0] || '';
+        badge = firstToken.toUpperCase().slice(0, 5);
+    }
+    
+    return { badge, full };
 }
 
 // Detect clusters and aggregate stats
@@ -137,7 +179,7 @@ function exportToCSV() {
     const clusters = analyzeClusters(currentData);
 
     // Define headers and rows
-    const headers = ['Trade Date', 'Ticker', 'Company', 'Price', 'Shares', 'Value', 'Insider Count'];
+    const headers = ['Trade Date', 'Ticker', 'Company', 'Insider Name', 'Title', 'Price', 'Shares', 'Value', 'Insider Count'];
     const rows = currentData.map(item => {
         const clusterInfo = clusters[item.ticker] || { count: 1 };
 
@@ -148,6 +190,8 @@ function exportToCSV() {
             escape(item.trade_date),
             escape(item.ticker),
             escape(item.company),
+            escape(item.insider_name),
+            escape(item.insider_title),
             escape(item.price),
             escape(item.shares),
             escape(item.value),
@@ -217,11 +261,22 @@ function renderTable() {
     const searchInput = document.getElementById('search-input');
     const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
 
-    // Filter currentData based on query matching ticker or company name
+    // Filter currentData based on search query AND C-Suite filter state
     const filteredData = currentData.filter(item => {
+        if (cSuiteFilterActive) {
+            const rawTitle = (item.insider_title || '').toUpperCase();
+            const isCSuite = rawTitle.includes('CEO') || 
+                             rawTitle.includes('CFO') || 
+                             rawTitle.includes('COO') || 
+                             rawTitle.includes('PRES');
+            if (!isCSuite) return false;
+        }
+
         if (!query) return true;
-        return (item.ticker || '').toLowerCase().includes(query) || 
-               (item.company || '').toLowerCase().includes(query);
+        return (item.ticker || '').toLowerCase().includes(query) ||
+            (item.company || '').toLowerCase().includes(query) ||
+            (item.insider_name || '').toLowerCase().includes(query) ||
+            (item.insider_title || '').toLowerCase().includes(query);
     });
 
     if (filteredData.length === 0) {
@@ -248,6 +303,28 @@ function renderTable() {
             tr.classList.add('value-medium');
         }
 
+        // Add C-Suite / Insider Title badge
+        let titleBadge = '';
+        if (item.insider_title) {
+            const normTitle = normalizeTitle(item.insider_title);
+            let badgeClass = 'neutral';
+            if (normTitle.badge === 'CEO') badgeClass = 'ceo';
+            else if (normTitle.badge === 'CFO') badgeClass = 'cfo';
+            else if (['COO', 'PRES', 'CHAIR'].includes(normTitle.badge)) badgeClass = 'c-suite';
+
+            titleBadge = `
+            <div class="title-badge-container">
+                <span class="title-badge ${badgeClass}">${escapeHtml(normTitle.badge)}</span>
+                <div class="title-tooltip">
+                    <div class="title-tooltip-line1"><b>${escapeHtml(item.insider_name)}</b> — <span>${escapeHtml(item.insider_title)}</span></div>
+                    <div class="title-tooltip-line2">Bought ${formatNumber(item.shares)} shares at $${formatNumber(item.price)}</div>
+                </div>
+            </div>`;
+        } else {
+            // Render an empty spacer with same layout container to preserve vertical alignment
+            titleBadge = `<div class="title-badge-container spacer" style="width: 65px; height: 1px; display: inline-flex;"></div>`;
+        }
+
         // Add cluster badge if multiple insiders
         let clusterBadge = '';
         if (clusters[item.ticker] && clusters[item.ticker].count >= 2) {
@@ -264,7 +341,13 @@ function renderTable() {
 
         tr.innerHTML = `
       <td data-label="Trade Date">${escapeHtml(item.trade_date)}</td>
-      <td data-label="Ticker"><a href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(item.ticker)}" target="_blank" rel="noopener noreferrer" class="ticker-link">${escapeHtml(item.ticker)}</a>${clusterBadge}</td>
+      <td data-label="Ticker">
+        <div class="ticker-cell-wrapper">
+          <a href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(item.ticker)}" target="_blank" rel="noopener noreferrer" class="ticker-link">${escapeHtml(item.ticker)}</a>
+          ${titleBadge}
+          ${clusterBadge}
+        </div>
+      </td>
       <td data-label="Company"><a href="https://www.google.com/search?q=${encodeURIComponent(item.company + ' stock news')}" target="_blank" rel="noopener noreferrer" class="company-link">${escapeHtml(item.company)}</a></td>
       <td data-label="Price">${formatNumber(item.price)}</td>
       <td data-label="Shares">${formatNumber(item.shares)}</td>
@@ -294,13 +377,16 @@ async function loadData() {
         // Handle both new object format and old array format (fallback)
         if (Array.isArray(jsonResponse)) {
             currentData = jsonResponse.map(normalizeRow);
-            updateTimestamp(); 
+            updateTimestamp();
         } else {
             currentData = (jsonResponse.data || []).map(normalizeRow);
             updateTimestamp(jsonResponse.lastUpdated);
-            
+
             const lastUpdatedEl = document.getElementById('last-updated');
-            if (jsonResponse.stale) {
+            if (jsonResponse.mocked) {
+                lastUpdatedEl.textContent = `Demo Mode (OpenInsider is down)`;
+                lastUpdatedEl.style.color = '#fbbf24';
+            } else if (jsonResponse.stale) {
                 lastUpdatedEl.textContent = `Offline (Serving cache from: ${new Date(jsonResponse.lastUpdated).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })})`;
                 lastUpdatedEl.style.color = '#ff6b6b';
             } else {
@@ -331,17 +417,94 @@ function setupEventDelegation() {
         // Only run custom tap logic if mobile viewport layout is active
         if (!window.matchMedia("(max-width: 768px)").matches) return;
 
-        // 1. Cluster badge click -> Show global overlay modal
-        const clusterBadge = e.target.closest('.cluster-badge-container');
-        if (clusterBadge) {
-            e.stopPropagation();
-            const tooltipContent = clusterBadge.querySelector('.cluster-tooltip');
+        // Do NOT trigger when clicking links or buttons inside the row
+        if (e.target.closest('a, button')) {
+            return;
+        }
+
+        const row = e.target.closest('tr');
+        if (!row) return;
+
+        // Find corresponding transaction from row content (by trade date, ticker, value)
+        const dateCell = row.querySelector('[data-label="Trade Date"]');
+        const tickerLink = row.querySelector('.ticker-link');
+        const valueCell = row.querySelector('[data-label="Value"]');
+
+        const tradeDate = dateCell ? dateCell.textContent.trim() : '';
+        const ticker = tickerLink ? tickerLink.textContent.trim() : '';
+        // Extract raw number from valueCell (e.g. "$175,440" -> 175440)
+        const valueStr = valueCell ? valueCell.textContent.replace(/[$,]/g, '').trim() : '';
+        const value = parseFloat(valueStr) || 0;
+
+        // Match from currentData
+        const item = currentData.find(d => 
+            d.ticker === ticker && 
+            d.trade_date === tradeDate && 
+            Math.abs(d.value - value) < 1
+        );
+
+        if (item) {
+            const normTitle = normalizeTitle(item.insider_title);
+            let badgeClass = 'neutral';
+            if (normTitle.badge === 'CEO') badgeClass = 'ceo';
+            else if (normTitle.badge === 'CFO') badgeClass = 'cfo';
+            else if (['COO', 'PRES', 'CHAIR'].includes(normTitle.badge)) badgeClass = 'c-suite';
+
+            const clusters = analyzeClusters(currentData);
+            const stats = clusters[ticker];
             const overlay = document.getElementById('mobile-tooltip-overlay');
-            if (tooltipContent && overlay) {
+            if (overlay) {
+                let clusterStatsHTML = '';
+                if (stats && stats.count >= 2) {
+                    clusterStatsHTML = `
+                        <div class="bottom-sheet-insider-list-header">🔥 Ticker Cluster Stats</div>
+                        <div class="bottom-sheet-metrics" style="margin-bottom: 0;">
+                            <div class="bottom-sheet-card">
+                                <span class="bottom-sheet-card-label">💰 Total Cluster Value</span>
+                                <span class="bottom-sheet-card-value green">$${formatNumber(stats.totalValue)}</span>
+                            </div>
+                            <div class="bottom-sheet-card">
+                                <span class="bottom-sheet-card-label">📊 Total Cluster Shares</span>
+                                <span class="bottom-sheet-card-value blue">${formatNumber(stats.totalShares)}</span>
+                            </div>
+                            <div class="bottom-sheet-card">
+                                <span class="bottom-sheet-card-label">👥 Insiders In Cluster</span>
+                                <span class="bottom-sheet-card-value">${formatNumber(stats.count)}</span>
+                            </div>
+                        </div>
+                    `;
+                }
+
                 overlay.innerHTML = `
-                    <div class="cluster-tooltip">
-                        <span class="modal-close-btn">&times;</span>
-                        ${tooltipContent.innerHTML}
+                    <div class="bottom-sheet">
+                        <div class="bottom-sheet-handle"></div>
+                        
+                        <div class="bottom-sheet-header">
+                            <div class="insider-header-info">
+                                <div class="insider-header-name">${escapeHtml(item.insider_name)}</div>
+                                <span class="title-badge ${badgeClass}">${escapeHtml(normTitle.badge)}</span>
+                            </div>
+                        </div>
+                        <div class="bottom-sheet-full-title">${escapeHtml(item.insider_title)}</div>
+
+                        <div class="bottom-sheet-metrics">
+                            <div class="bottom-sheet-card">
+                                <span class="bottom-sheet-card-label">💰 Trade Value</span>
+                                <span class="bottom-sheet-card-value green">$${formatNumber(item.value)}</span>
+                            </div>
+                            <div class="bottom-sheet-card">
+                                <span class="bottom-sheet-card-label">📊 Shares @ Price</span>
+                                <span class="bottom-sheet-card-value">${formatNumber(item.shares)} @ $${formatNumber(item.price)}</span>
+                            </div>
+                            <div class="bottom-sheet-card">
+                                <span class="bottom-sheet-card-label">📅 Trade Date</span>
+                                <span class="bottom-sheet-card-value">${escapeHtml(item.trade_date)}</span>
+                            </div>
+                        </div>
+
+                        ${clusterStatsHTML}
+
+                        <button class="bottom-sheet-close-btn" style="margin-top: 1.5rem;">Close</button>
                     </div>`;
 
                 overlay.style.display = 'flex';
@@ -349,33 +512,16 @@ function setupEventDelegation() {
                     overlay.classList.add('visible');
                 });
 
-                const closeBtn = overlay.querySelector('.modal-close-btn');
+                const closeBtn = overlay.querySelector('.bottom-sheet-close-btn');
                 if (closeBtn) {
                     closeBtn.addEventListener('click', (ev) => {
                         ev.stopPropagation();
                         overlay.classList.remove('visible');
                         setTimeout(() => {
                             overlay.style.display = 'none';
-                        }, 200);
+                        }, 300);
                     });
                 }
-            }
-            return;
-        }
-
-        // 2. Row click -> Toggle active state (for expanding row preview)
-        const row = e.target.closest('tr');
-        if (row) {
-            // Do NOT toggle when clicking links or buttons inside the row
-            if (e.target.closest('a, button')) {
-                return;
-            }
-
-            if (row.classList.contains('is-active')) {
-                row.classList.remove('is-active');
-            } else {
-                tbody.querySelectorAll('tr').forEach(r => r.classList.remove('is-active'));
-                row.classList.add('is-active');
             }
         }
     });
@@ -388,7 +534,7 @@ function setupEventDelegation() {
                 overlay.classList.remove('visible');
                 setTimeout(() => {
                     overlay.style.display = 'none';
-                }, 200);
+                }, 300);
             }
         });
     }
@@ -436,6 +582,16 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Add cluster filter button handler
     document.getElementById('cluster-filter-btn').addEventListener('click', sortByClusters);
+
+    // Add C-Suite toggle button handler
+    const csuiteBtn = document.getElementById('csuite-filter-btn');
+    if (csuiteBtn) {
+        csuiteBtn.addEventListener('click', () => {
+            cSuiteFilterActive = !cSuiteFilterActive;
+            csuiteBtn.classList.toggle('active', cSuiteFilterActive);
+            renderTable();
+        });
+    }
 
     // Add export button handler
     document.getElementById('export-btn').addEventListener('click', exportToCSV);
