@@ -504,12 +504,40 @@ function setupEventDelegation() {
 
                         ${clusterStatsHTML}
 
+                        <div class="bottom-sheet-chart-container">
+                            <div id="tradingview-mini-chart"></div>
+                        </div>
+
                         <button class="bottom-sheet-close-btn" style="margin-top: 1.5rem;">Close</button>
                     </div>`;
 
                 overlay.style.display = 'flex';
                 requestAnimationFrame(() => {
                     overlay.classList.add('visible');
+                    // Instantiate TradingView MiniWidget after modal is visible in DOM
+                    try {
+                        if (typeof TradingView !== 'undefined' && TradingView.MiniWidget) {
+                            new TradingView.MiniWidget({
+                                "container_id": "tradingview-mini-chart",
+                                "symbol": ticker,
+                                "width": "100%",
+                                "height": 220,
+                                "locale": "en",
+                                "dateRange": "3M",
+                                "colorTheme": "dark",
+                                "trendLineColor": "rgba(74, 158, 255, 1)",
+                                "underLineColor": "rgba(74, 158, 255, 0.15)",
+                                "underLineBottomColor": "rgba(74, 158, 255, 0)",
+                                "isHotlist": false,
+                                "calendar": false,
+                                "showVolume": false,
+                                "supportPercentage": true,
+                                "largeChartUrl": ""
+                            });
+                        }
+                    } catch (e) {
+                        console.error("Failed to initialize TradingView MiniWidget:", e);
+                    }
                 });
 
                 const closeBtn = overlay.querySelector('.bottom-sheet-close-btn');

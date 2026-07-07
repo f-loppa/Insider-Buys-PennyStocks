@@ -1233,3 +1233,16 @@ td:nth-child(6) {
     margin: 0;
   }
 }
+
+/* Bottom Sheet TradingView Chart Container */
+.bottom-sheet-chart-container {
+  width: 100%;
+  margin-top: 1rem;
+  padding: 0.5rem;
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
+  overflow: hidden;
+  height: 232px;
+  box-sizing: border-box;
+}
