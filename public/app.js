@@ -214,9 +214,30 @@ function renderTable() {
     const tbody = document.querySelector('#data-table tbody');
     tbody.innerHTML = '';
 
+    const searchInput = document.getElementById('search-input');
+    const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
+
+    // Filter currentData based on query matching ticker or company name
+    const filteredData = currentData.filter(item => {
+        if (!query) return true;
+        return (item.ticker || '').toLowerCase().includes(query) || 
+               (item.company || '').toLowerCase().includes(query);
+    });
+
+    if (filteredData.length === 0) {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+            <td colspan="6" style="text-align: center; color: #888; padding: 2.5rem; font-style: italic;">
+                🔍 No stocks found matching "${escapeHtml(query)}"
+            </td>
+        `;
+        tbody.appendChild(tr);
+        return;
+    }
+
     const clusters = analyzeClusters(currentData);
 
-    currentData.forEach(item => {
+    filteredData.forEach(item => {
         const tr = document.createElement('tr');
         const value = item.value;
 
@@ -377,6 +398,31 @@ function setupEventDelegation() {
 document.addEventListener('DOMContentLoaded', async () => {
     setupEventDelegation();
     await loadData();
+
+    // Bind search input to dynamically filter table
+    const searchInput = document.getElementById('search-input');
+    if (searchInput) {
+        searchInput.addEventListener('input', () => {
+            renderTable();
+        });
+    }
+
+    // Keyboard shortcut '/' to focus search input
+    document.addEventListener('keydown', (e) => {
+        const searchInput = document.getElementById('search-input');
+        if (!searchInput) return;
+
+        // Ignore if user is already typing in an input field
+        if (document.activeElement.tagName === 'INPUT' || document.activeElement.tagName === 'TEXTAREA') {
+            return;
+        }
+
+        if (e.key === '/') {
+            e.preventDefault();
+            searchInput.focus();
+            searchInput.select();
+        }
+    });
 
     // Add click handlers to sortable headers
     document.querySelectorAll('th.sortable').forEach(th => {
