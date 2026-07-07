@@ -516,12 +516,17 @@ function setupEventDelegation() {
                     overlay.classList.add('visible');
                     // Instantiate TradingView MiniWidget after modal is visible in DOM
                     try {
-                        if (typeof TradingView !== 'undefined' && TradingView.MiniWidget) {
-                            new TradingView.MiniWidget({
-                                "container_id": "tradingview-mini-chart",
+                        const chartContainer = document.getElementById('tradingview-mini-chart');
+                        if (chartContainer) {
+                            chartContainer.innerHTML = ''; // Clear previous chart
+                            const script = document.createElement('script');
+                            script.type = 'text/javascript';
+                            script.src = 'https://s3.tradingview.com/external-embedding/embed-widget-mini-symbol-overview.js';
+                            script.async = true;
+                            script.text = JSON.stringify({
                                 "symbol": ticker,
                                 "width": "100%",
-                                "height": 220,
+                                "height": "100%",
                                 "locale": "en",
                                 "dateRange": "3M",
                                 "colorTheme": "dark",
@@ -534,6 +539,7 @@ function setupEventDelegation() {
                                 "supportPercentage": true,
                                 "largeChartUrl": ""
                             });
+                            chartContainer.appendChild(script);
                         }
                     } catch (e) {
                         console.error("Failed to initialize TradingView MiniWidget:", e);
