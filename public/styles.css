@@ -858,4 +858,7 @@ td:nth-child(6) {
   .search-wrapper {
     max-width: 100%;
   }
+  .shortcut-badge {
+    display: none;
+  }
 }
