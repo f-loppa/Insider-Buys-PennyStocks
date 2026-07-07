@@ -1,11 +1,12 @@
 let currentData = [];
 let currentSort = { column: null, direction: null };
 
-// Format number with commas
+// Format number with commas (guarded against NaN)
 function formatNumber(num) {
-    if (!num || num === '') return '';
+    if (num === null || num === undefined || num === '') return '';
     const numStr = num.toString().replace(/,/g, '');
-    return parseFloat(numStr).toLocaleString('en-US');
+    const n = parseFloat(numStr);
+    return isNaN(n) ? '' : n.toLocaleString('en-US');
 }
 
 // Normalize row data
@@ -77,7 +78,6 @@ function sortData(column) {
         }
     });
 
-    // Sort the data
     // Sort the data
     currentData.sort((a, b) => {
         let aVal = a[column];
@@ -184,7 +184,7 @@ function renderHotPicks() {
     topByValue.forEach(item => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-      <td data-label="Ticker"><a href="https://www.tradingview.com/chart/?symbol=${escapeHtml(item.ticker)}" target="_blank" rel="noopener noreferrer" class="ticker-link">${escapeHtml(item.ticker)}</a></td>
+      <td data-label="Ticker"><a href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(item.ticker)}" target="_blank" rel="noopener noreferrer" class="ticker-link">${escapeHtml(item.ticker)}</a></td>
       <td data-label="Value" style="color: #4ade80; font-weight: 600;">$${formatNumber(item.value)}</td>
       <td data-label="Date" style="color: #b0b0b0; font-size: 0.8125rem;">${escapeHtml(item.trade_date)}</td>
     `;
@@ -201,7 +201,7 @@ function renderHotPicks() {
     mostRecent.forEach(item => {
         const tr = document.createElement('tr');
         tr.innerHTML = `
-      <td data-label="Ticker"><a href="https://www.tradingview.com/chart/?symbol=${escapeHtml(item.ticker)}" target="_blank" rel="noopener noreferrer" class="ticker-link">${escapeHtml(item.ticker)}</a></td>
+      <td data-label="Ticker"><a href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(item.ticker)}" target="_blank" rel="noopener noreferrer" class="ticker-link">${escapeHtml(item.ticker)}</a></td>
       <td data-label="Company" style="color: #d0d0d0;"><a href="https://www.google.com/search?q=${encodeURIComponent(item.company + ' stock news')}" target="_blank" rel="noopener noreferrer" class="company-link">${escapeHtml(item.company.length > 25 ? item.company.substring(0, 25) + '...' : item.company)}</a></td>
       <td data-label="Date" style="color: #b0b0b0; font-size: 0.8125rem;">${escapeHtml(item.trade_date)}</td>
     `;
@@ -243,7 +243,7 @@ function renderTable() {
 
         tr.innerHTML = `
       <td data-label="Trade Date">${escapeHtml(item.trade_date)}</td>
-      <td data-label="Ticker"><a href="https://www.tradingview.com/chart/?symbol=${escapeHtml(item.ticker)}" target="_blank" rel="noopener noreferrer" class="ticker-link">${escapeHtml(item.ticker)}</a>${clusterBadge}</td>
+      <td data-label="Ticker"><a href="https://www.tradingview.com/chart/?symbol=${encodeURIComponent(item.ticker)}" target="_blank" rel="noopener noreferrer" class="ticker-link">${escapeHtml(item.ticker)}</a>${clusterBadge}</td>
       <td data-label="Company"><a href="https://www.google.com/search?q=${encodeURIComponent(item.company + ' stock news')}" target="_blank" rel="noopener noreferrer" class="company-link">${escapeHtml(item.company)}</a></td>
       <td data-label="Price">${formatNumber(item.price)}</td>
       <td data-label="Shares">${formatNumber(item.shares)}</td>
@@ -252,9 +252,6 @@ function renderTable() {
     `;
         tbody.appendChild(tr);
     });
-
-    // Re-attach mobile listeners after render
-    attachMobileListeners();
 }
 
 // Load data from API
@@ -266,6 +263,7 @@ async function loadData() {
 
     try {
         refreshBtn.classList.add('loading');
+        loadingEl.textContent = 'Loading data…'; // Reset text on load
         loadingEl.classList.remove('hidden');
 
         const response = await fetch('/api/data');
@@ -275,10 +273,18 @@ async function loadData() {
         // Handle both new object format and old array format (fallback)
         if (Array.isArray(jsonResponse)) {
             currentData = jsonResponse.map(normalizeRow);
-            updateTimestamp(); // fallback to current time
+            updateTimestamp(); 
         } else {
             currentData = (jsonResponse.data || []).map(normalizeRow);
             updateTimestamp(jsonResponse.lastUpdated);
+            
+            const lastUpdatedEl = document.getElementById('last-updated');
+            if (jsonResponse.stale) {
+                lastUpdatedEl.textContent = `Offline (Serving cache from: ${new Date(jsonResponse.lastUpdated).toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' })})`;
+                lastUpdatedEl.style.color = '#ff6b6b';
+            } else {
+                lastUpdatedEl.style.color = '';
+            }
         }
 
         renderHotPicks();
@@ -295,8 +301,81 @@ async function loadData() {
     }
 }
 
+// Setup Event Delegation for Mobile / Responsive UI
+function setupEventDelegation() {
+    const tbody = document.querySelector('#data-table tbody');
+    if (!tbody) return;
+
+    tbody.addEventListener('click', (e) => {
+        // Only run custom tap logic if mobile viewport layout is active
+        if (!window.matchMedia("(max-width: 768px)").matches) return;
+
+        // 1. Cluster badge click -> Show global overlay modal
+        const clusterBadge = e.target.closest('.cluster-badge-container');
+        if (clusterBadge) {
+            e.stopPropagation();
+            const tooltipContent = clusterBadge.querySelector('.cluster-tooltip');
+            const overlay = document.getElementById('mobile-tooltip-overlay');
+            if (tooltipContent && overlay) {
+                overlay.innerHTML = `
+                    <div class="cluster-tooltip">
+                        <span class="modal-close-btn">&times;</span>
+                        ${tooltipContent.innerHTML}
+                    </div>`;
+
+                overlay.style.display = 'flex';
+                requestAnimationFrame(() => {
+                    overlay.classList.add('visible');
+                });
+
+                const closeBtn = overlay.querySelector('.modal-close-btn');
+                if (closeBtn) {
+                    closeBtn.addEventListener('click', (ev) => {
+                        ev.stopPropagation();
+                        overlay.classList.remove('visible');
+                        setTimeout(() => {
+                            overlay.style.display = 'none';
+                        }, 200);
+                    });
+                }
+            }
+            return;
+        }
+
+        // 2. Row click -> Toggle active state (for expanding row preview)
+        const row = e.target.closest('tr');
+        if (row) {
+            // Do NOT toggle when clicking links or buttons inside the row
+            if (e.target.closest('a, button')) {
+                return;
+            }
+
+            if (row.classList.contains('is-active')) {
+                row.classList.remove('is-active');
+            } else {
+                tbody.querySelectorAll('tr').forEach(r => r.classList.remove('is-active'));
+                row.classList.add('is-active');
+            }
+        }
+    });
+
+    // Close mobile overlay modal when clicking on its background overlay
+    const overlay = document.getElementById('mobile-tooltip-overlay');
+    if (overlay) {
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                overlay.classList.remove('visible');
+                setTimeout(() => {
+                    overlay.style.display = 'none';
+                }, 200);
+            }
+        });
+    }
+}
+
 // Initialize
 document.addEventListener('DOMContentLoaded', async () => {
+    setupEventDelegation();
     await loadData();
 
     // Add click handlers to sortable headers
@@ -314,86 +393,4 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Add export button handler
     document.getElementById('export-btn').addEventListener('click', exportToCSV);
-});
-
-// Mobile Interaction Logic
-function attachMobileListeners() {
-    // Check if we are on a mobile device
-    if (!window.matchMedia("(max-width: 768px)").matches) return;
-
-    // Row Tap Logic
-    const rows = document.querySelectorAll('tbody tr');
-    rows.forEach(row => {
-        row.addEventListener('click', (e) => {
-            // Do NOT toggle when clicking links/buttons/badges inside the row
-            if (e.target.closest('a, button, .cluster-badge-container')) {
-                return;
-            }
-            // Toggle active state
-            if (row.classList.contains('is-active')) {
-                row.classList.remove('is-active');
-            } else {
-                // Remove active from other rows
-                rows.forEach(r => r.classList.remove('is-active'));
-                row.classList.add('is-active');
-            }
-        });
-    });
-
-    // Cluster Badge Logic (Global Modal)
-    const clusters = document.querySelectorAll('.cluster-badge-container');
-    const overlay = document.getElementById('mobile-tooltip-overlay');
-
-    // Clean up old listeners (simple way is just to replace nodes, but for now assuming this runs once or we're careful. `attachMobileListeners` is called on load. JS listeners prevent dups?)
-    // actually renderTable calls it again. using new elements.
-
-    clusters.forEach(cluster => {
-        cluster.addEventListener('click', (e) => {
-            e.stopPropagation(); // so badge taps don't trigger row taps
-
-            // Get content
-            const tooltipContent = cluster.querySelector('.cluster-tooltip');
-            if (tooltipContent) {
-                // Prepend a close button to the content
-                overlay.innerHTML = `
-                    <div class="cluster-tooltip">
-                        <span class="modal-close-btn">&times;</span>
-                        ${tooltipContent.innerHTML}
-                    </div>`;
-
-                overlay.style.display = 'flex';
-                // Trigger reflow/frame for transition
-                requestAnimationFrame(() => {
-                    overlay.classList.add('visible');
-                });
-
-                // Add listener to the NEW close button
-                const closeBtn = overlay.querySelector('.modal-close-btn');
-                closeBtn.addEventListener('click', (ev) => {
-                    ev.stopPropagation();
-                    overlay.classList.remove('visible');
-                    setTimeout(() => {
-                        overlay.style.display = 'none';
-                    }, 200);
-                });
-            }
-        });
-    });
-}
-
-// Global Modal Logic (Initialize once)
-const overlay = document.getElementById('mobile-tooltip-overlay');
-if (overlay) {
-    overlay.addEventListener('click', () => {
-        overlay.classList.remove('visible');
-        setTimeout(() => {
-            overlay.style.display = 'none';
-        }, 200); // Wait for transition
-    });
-}
-
-// Close tooltips when clicking outside (Desktop only mostly, but good cleanup)
-document.addEventListener('click', () => {
-    const activeClusters = document.querySelectorAll('.cluster-badge-container.tooltip-active');
-    activeClusters.forEach(c => c.classList.remove('tooltip-active'));
 });
