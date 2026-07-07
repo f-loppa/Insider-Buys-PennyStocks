@@ -414,9 +414,6 @@ function setupEventDelegation() {
     if (!tbody) return;
 
     tbody.addEventListener('click', (e) => {
-        // Only run custom tap logic if mobile viewport layout is active
-        if (!window.matchMedia("(max-width: 768px)").matches) return;
-
         // Do NOT trigger when clicking links or buttons inside the row
         if (e.target.closest('a, button')) {
             return;
