@@ -1,6 +1,13 @@
 let currentData = [];
-let currentSort = { column: null, direction: null };
-let cSuiteFilterActive = false;
+let filterState = {
+    primarySort: 'trade_date',
+    primarySortDir: 'desc',
+    secondarySort: 'value',
+    secondarySortDir: 'desc',
+    minValue: 0,
+    roles: [],
+    cluster: 'all'
+};
 
 // Format number with commas (guarded against NaN)
 function formatNumber(num) {
@@ -102,72 +109,22 @@ function updateTimestamp(timestamp) {
 
 // Sort data
 function sortData(column) {
-    const headers = document.querySelectorAll('th.sortable');
-
-    // Toggle sort direction
-    if (currentSort.column === column) {
-        currentSort.direction = currentSort.direction === 'asc' ? 'desc' : 'asc';
+    if (filterState.primarySort === column) {
+        filterState.primarySortDir = filterState.primarySortDir === 'asc' ? 'desc' : 'asc';
     } else {
-        currentSort.column = column;
-        currentSort.direction = 'asc';
+        filterState.primarySort = column;
+        filterState.primarySortDir = 'desc'; // Default to desc for ease of browsing
     }
-
-    // Update header classes
-    headers.forEach(th => {
-        th.classList.remove('sorted-asc', 'sorted-desc');
-        if (th.dataset.column === column) {
-            th.classList.add(currentSort.direction === 'asc' ? 'sorted-asc' : 'sorted-desc');
-        }
-    });
-
-    // Sort the data
-    currentData.sort((a, b) => {
-        let aVal = a[column];
-        let bVal = b[column];
-
-        // Handle Trade Date specially using the pre-calculated timestamp
-        if (column === 'trade_date') {
-            aVal = a.trade_date_ts;
-            bVal = b.trade_date_ts;
-        }
-
-        if (currentSort.direction === 'asc') {
-            return aVal > bVal ? 1 : aVal < bVal ? -1 : 0;
-        } else {
-            return aVal < bVal ? 1 : aVal > bVal ? -1 : 0;
-        }
-    });
 
     renderTable();
 }
 
 // Sort by clusters
 function sortByClusters() {
-    const clusters = analyzeClusters(currentData);
-
-    // Reset column sort indicators
-    document.querySelectorAll('th.sortable').forEach(th => {
-        th.classList.remove('sorted-asc', 'sorted-desc');
-    });
-    currentSort = { column: 'cluster', direction: 'desc' };
-
-    currentData.sort((a, b) => {
-        const countA = (clusters[a.ticker] && clusters[a.ticker].count) || 0;
-        const countB = (clusters[b.ticker] && clusters[b.ticker].count) || 0;
-
-        // Sort by count desc
-        if (countA !== countB) {
-            return countB - countA;
-        }
-
-        // Then by ticker to keep groups together
-        if (a.ticker !== b.ticker) {
-            return a.ticker.localeCompare(b.ticker);
-        }
-
-        // Then by value desc
-        return b.value - a.value;
-    });
+    filterState.primarySort = 'cluster';
+    filterState.primarySortDir = 'desc';
+    filterState.secondarySort = 'value';
+    filterState.secondarySortDir = 'desc';
 
     renderTable();
 }
@@ -253,45 +210,138 @@ function renderHotPicks() {
     });
 }
 
-// Render table with current data
+// Render table with current data (filtered and sorted)
 function renderTable() {
     const tbody = document.querySelector('#data-table tbody');
+    if (!tbody) return;
     tbody.innerHTML = '';
 
     const searchInput = document.getElementById('search-input');
     const query = searchInput ? searchInput.value.toLowerCase().trim() : '';
 
-    // Filter currentData based on search query AND C-Suite filter state
-    const filteredData = currentData.filter(item => {
-        if (cSuiteFilterActive) {
-            const rawTitle = (item.insider_title || '').toUpperCase();
-            const isCSuite = rawTitle.includes('CEO') || 
-                             rawTitle.includes('CFO') || 
-                             rawTitle.includes('COO') || 
-                             rawTitle.includes('PRES');
-            if (!isCSuite) return false;
+    const clusters = analyzeClusters(currentData);
+
+    // 1. Filter currentData based on search query, C-Suite filter state, and custom filters
+    let filteredData = currentData.filter(item => {
+        // Search query filter
+        if (query) {
+            const matchesQuery = (item.ticker || '').toLowerCase().includes(query) ||
+                (item.company || '').toLowerCase().includes(query) ||
+                (item.insider_name || '').toLowerCase().includes(query) ||
+                (item.insider_title || '').toLowerCase().includes(query);
+            if (!matchesQuery) return false;
         }
 
-        if (!query) return true;
-        return (item.ticker || '').toLowerCase().includes(query) ||
-            (item.company || '').toLowerCase().includes(query) ||
-            (item.insider_name || '').toLowerCase().includes(query) ||
-            (item.insider_title || '').toLowerCase().includes(query);
+        // Min value filter
+        if (item.value < filterState.minValue) return false;
+
+        // Role filter
+        if (filterState.roles.length > 0) {
+            const normTitle = normalizeTitle(item.insider_title);
+            let passesRole = false;
+            for (let role of filterState.roles) {
+                if (role === 'CEO' && normTitle.badge === 'CEO') passesRole = true;
+                else if (role === 'CFO' && normTitle.badge === 'CFO') passesRole = true;
+                else if (role === 'C-Suite' && ['CEO', 'CFO', 'COO', 'PRES', 'CHAIR'].includes(normTitle.badge)) passesRole = true;
+                else if (role === 'DIR' && normTitle.badge === 'DIR') passesRole = true;
+                else if (role === '10%' && normTitle.badge === '10%') passesRole = true;
+            }
+            if (!passesRole) return false;
+        }
+
+        // Cluster filter
+        if (filterState.cluster === 'clusters') {
+            const clusterCount = (clusters[item.ticker] && clusters[item.ticker].count) || 0;
+            if (clusterCount < 2) return false;
+        }
+
+        return true;
     });
+
+    // 2. Sort filteredData
+    filteredData.sort((a, b) => {
+        const getVal = (item, col) => {
+            if (col === 'trade_date') return item.trade_date_ts;
+            if (col === 'cluster') return (clusters[item.ticker] && clusters[item.ticker].count) || 0;
+            return item[col];
+        };
+
+        // Primary sort comparison
+        const col1 = filterState.primarySort;
+        let aVal1 = getVal(a, col1);
+        let bVal1 = getVal(b, col1);
+        
+        let diff1 = 0;
+        if (typeof aVal1 === 'string' && typeof bVal1 === 'string') {
+            diff1 = aVal1.localeCompare(bVal1);
+        } else {
+            diff1 = aVal1 > bVal1 ? 1 : aVal1 < bVal1 ? -1 : 0;
+        }
+
+        if (filterState.primarySortDir === 'desc') {
+            diff1 = -diff1;
+        }
+
+        if (diff1 !== 0) return diff1;
+
+        // Secondary sort comparison
+        const col2 = filterState.secondarySort;
+        if (col2 !== 'none' && col2 !== col1) {
+            let aVal2 = getVal(a, col2);
+            let bVal2 = getVal(b, col2);
+
+            let diff2 = 0;
+            if (typeof aVal2 === 'string' && typeof bVal2 === 'string') {
+                diff2 = aVal2.localeCompare(bVal2);
+            } else {
+                diff2 = aVal2 > bVal2 ? 1 : aVal2 < bVal2 ? -1 : 0;
+            }
+
+            if (filterState.secondarySortDir === 'desc') {
+                diff2 = -diff2;
+            }
+            return diff2;
+        }
+
+        return 0;
+    });
+
+    // 3. Update active sort classes on table headers
+    // 3. Update active sort classes on table headers
+    const headers = document.querySelectorAll('th.sortable');
+    headers.forEach(th => {
+        th.classList.remove('sorted-asc', 'sorted-desc');
+        const column = th.dataset.column;
+        if (column === filterState.primarySort) {
+            th.classList.add(filterState.primarySortDir === 'asc' ? 'sorted-asc' : 'sorted-desc');
+        }
+    });
+
+    // Update trigger active classes
+    const clusterBtn = document.getElementById('cluster-filter-btn');
+    const csuiteBtn = document.getElementById('csuite-filter-btn');
+    if (clusterBtn) {
+        clusterBtn.classList.toggle('active', filterState.cluster !== 'all');
+    }
+    if (csuiteBtn) {
+        csuiteBtn.classList.toggle('active', filterState.role !== 'all');
+    }
+
+    // Update Reset button visibility
+    updateResetBtn();
 
     if (filteredData.length === 0) {
         const tr = document.createElement('tr');
         tr.innerHTML = `
             <td colspan="6" style="text-align: center; color: #888; padding: 2.5rem; font-style: italic;">
-                🔍 No stocks found matching "${escapeHtml(query)}"
+                🔍 No stocks found matching current filter criteria
             </td>
         `;
         tbody.appendChild(tr);
         return;
     }
 
-    const clusters = analyzeClusters(currentData);
-
+    // 4. Render Rows
     filteredData.forEach(item => {
         const tr = document.createElement('tr');
         const value = item.value;
@@ -351,11 +401,30 @@ function renderTable() {
       <td data-label="Company"><a href="https://www.google.com/search?q=${encodeURIComponent(item.company + ' stock news')}" target="_blank" rel="noopener noreferrer" class="company-link">${escapeHtml(item.company)}</a></td>
       <td data-label="Price">${formatNumber(item.price)}</td>
       <td data-label="Shares">${formatNumber(item.shares)}</td>
-
       <td data-label="Value">$${formatNumber(item.value)}</td>
     `;
         tbody.appendChild(tr);
     });
+}
+
+function updateResetBtn() {
+    const resetBtn = document.getElementById('reset-filters-btn');
+    if (!resetBtn) return;
+    
+    const searchInput = document.getElementById('search-input');
+    const hasSearch = searchInput && searchInput.value.trim() !== '';
+    const hasRoleFilter = filterState.roles.length > 0;
+    const hasClusterFilter = filterState.cluster !== 'all';
+    const hasValueFilter = filterState.minValue > 0;
+    const hasCustomSort = filterState.primarySort !== 'trade_date' || filterState.primarySortDir !== 'desc';
+    
+    const isDirty = hasSearch || hasRoleFilter || hasClusterFilter || hasCustomSort || hasValueFilter;
+    
+    if (isDirty) {
+        resetBtn.classList.add('visible');
+    } else {
+        resetBtn.classList.remove('visible');
+    }
 }
 
 // Load data from API
@@ -441,64 +510,98 @@ function setupEventDelegation() {
         );
 
         if (item) {
-            const normTitle = normalizeTitle(item.insider_title);
-            let badgeClass = 'neutral';
-            if (normTitle.badge === 'CEO') badgeClass = 'ceo';
-            else if (normTitle.badge === 'CFO') badgeClass = 'cfo';
-            else if (['COO', 'PRES', 'CHAIR'].includes(normTitle.badge)) badgeClass = 'c-suite';
-
             const clusters = analyzeClusters(currentData);
             const stats = clusters[ticker];
-            const overlay = document.getElementById('mobile-tooltip-overlay');
-            if (overlay) {
-                let clusterStatsHTML = '';
-                if (stats && stats.count >= 2) {
-                    clusterStatsHTML = `
-                        <div class="bottom-sheet-insider-list-header">🔥 Ticker Cluster Stats</div>
-                        <div class="bottom-sheet-metrics" style="margin-bottom: 0;">
-                            <div class="bottom-sheet-card">
-                                <span class="bottom-sheet-card-label">💰 Total Cluster Value</span>
-                                <span class="bottom-sheet-card-value green">$${formatNumber(stats.totalValue)}</span>
-                            </div>
-                            <div class="bottom-sheet-card">
-                                <span class="bottom-sheet-card-label">📊 Total Cluster Shares</span>
-                                <span class="bottom-sheet-card-value blue">${formatNumber(stats.totalShares)}</span>
-                            </div>
-                            <div class="bottom-sheet-card">
-                                <span class="bottom-sheet-card-label">👥 Insiders In Cluster</span>
-                                <span class="bottom-sheet-card-value">${formatNumber(stats.count)}</span>
-                            </div>
-                        </div>
-                    `;
+
+            // Get ALL trades for this ticker
+            const tickerTrades = currentData.filter(d => d.ticker === ticker);
+
+            let tradesCardsHTML = '';
+            tickerTrades.forEach((trade, index) => {
+                const normTitle = normalizeTitle(trade.insider_title);
+                let badgeClass = 'neutral';
+                if (normTitle.badge === 'CEO') badgeClass = 'ceo';
+                else if (normTitle.badge === 'CFO') badgeClass = 'cfo';
+                else if (['COO', 'PRES', 'CHAIR'].includes(normTitle.badge)) badgeClass = 'c-suite';
+                else if (normTitle.badge === 'DIR') badgeClass = 'dir';
+                else if (normTitle.badge === 'VP') badgeClass = 'vp';
+                else if (normTitle.badge === '10%') badgeClass = 'ten-percent';
+
+                if (index > 0) {
+                    tradesCardsHTML += `<div class="glowing-divider"></div>`;
                 }
 
+                tradesCardsHTML += `
+                    <div class="bottom-sheet-trade-item" style="margin-bottom: 0.75rem;">
+                        <div class="bottom-sheet-header" style="margin-bottom: 0.25rem;">
+                            <div class="insider-header-info">
+                                <div class="insider-header-name">${escapeHtml(trade.insider_name)}</div>
+                                <span class="title-badge ${badgeClass}">${escapeHtml(normTitle.badge)}</span>
+                            </div>
+                        </div>
+                        <div class="bottom-sheet-full-title" style="border-bottom: none; margin-bottom: 0.5rem; padding-bottom: 0;">${escapeHtml(trade.insider_title)}</div>
+                        
+                        <div class="bottom-sheet-metrics" style="margin-bottom: 0;">
+                            <div class="bottom-sheet-card">
+                                <span class="bottom-sheet-card-label">💰 Trade Value</span>
+                                <span class="bottom-sheet-card-value green">$${formatNumber(trade.value)}</span>
+                            </div>
+                            <div class="bottom-sheet-card">
+                                <span class="bottom-sheet-card-label">📊 Shares @ Price</span>
+                                <span class="bottom-sheet-card-value">${formatNumber(trade.shares)} @ $${formatNumber(trade.price)}</span>
+                            </div>
+                            <div class="bottom-sheet-card">
+                                <span class="bottom-sheet-card-label">📅 Trade Date</span>
+                                <span class="bottom-sheet-card-value">${escapeHtml(trade.trade_date)}</span>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            });
+
+            let clusterStatsHTML = '';
+            if (stats && stats.count >= 2) {
+                clusterStatsHTML = `
+                    <div class="glowing-divider"></div>
+                    <div class="bottom-sheet-insider-list-header" style="margin-top: 0.5rem;">🔥 TICKER CLUSTER STATS</div>
+                    <div class="bottom-sheet-metrics">
+                        <div class="bottom-sheet-card">
+                            <span class="bottom-sheet-card-label">💰 Total Cluster Value</span>
+                            <span class="bottom-sheet-card-value green">$${formatNumber(stats.totalValue)}</span>
+                        </div>
+                        <div class="bottom-sheet-card">
+                            <span class="bottom-sheet-card-label">📊 Total Cluster Shares</span>
+                            <span class="bottom-sheet-card-value blue">${formatNumber(stats.totalShares)}</span>
+                        </div>
+                        <div class="bottom-sheet-card">
+                            <span class="bottom-sheet-card-label">👥 Insiders In Cluster</span>
+                            <span class="bottom-sheet-card-value">${stats.count}</span>
+                        </div>
+                    </div>
+                `;
+            }
+
+            const overlay = document.getElementById('mobile-tooltip-overlay');
+            if (overlay) {
                 overlay.innerHTML = `
                     <div class="bottom-sheet">
                         <div class="bottom-sheet-handle"></div>
                         
                         <div class="bottom-sheet-header">
-                            <div class="insider-header-info">
-                                <div class="insider-header-name">${escapeHtml(item.insider_name)}</div>
-                                <span class="title-badge ${badgeClass}">${escapeHtml(normTitle.badge)}</span>
-                            </div>
-                        </div>
-                        <div class="bottom-sheet-full-title">${escapeHtml(item.insider_title)}</div>
-
-                        <div class="bottom-sheet-metrics">
-                            <div class="bottom-sheet-card">
-                                <span class="bottom-sheet-card-label">💰 Trade Value</span>
-                                <span class="bottom-sheet-card-value green">$${formatNumber(item.value)}</span>
-                            </div>
-                            <div class="bottom-sheet-card">
-                                <span class="bottom-sheet-card-label">📊 Shares @ Price</span>
-                                <span class="bottom-sheet-card-value">${formatNumber(item.shares)} @ $${formatNumber(item.price)}</span>
-                            </div>
-                            <div class="bottom-sheet-card">
-                                <span class="bottom-sheet-card-label">📅 Trade Date</span>
-                                <span class="bottom-sheet-card-value">${escapeHtml(item.trade_date)}</span>
+                            <div class="company-header-info">
+                                <div class="company-title">${escapeHtml(item.company)}</div>
+                                <div class="ticker-badge-container">
+                                    <span class="ticker-symbol">${escapeHtml(item.ticker)}</span>
+                                </div>
                             </div>
                         </div>
 
+                        ${tickerTrades.length > 1 ? `<div class="bottom-sheet-insider-list-header">👥 Insider Trades (${tickerTrades.length})</div>` : ''}
+                        
+                        <div class="bottom-sheet-trades-list" style="width: 100%;">
+                            ${tradesCardsHTML}
+                        </div>
+                        
                         ${clusterStatsHTML}
 
                         <div class="bottom-sheet-chart-container">
@@ -603,27 +706,181 @@ document.addEventListener('DOMContentLoaded', async () => {
 
     // Add click handlers to sortable headers
     document.querySelectorAll('th.sortable').forEach(th => {
-        th.addEventListener('click', () => {
+        th.addEventListener('click', (e) => {
+            // Ignore if clicking inside a filter dropdown
+            if (e.target.closest('.inline-filter-dropdown')) return;
             sortData(th.dataset.column);
+        });
+    });
+
+    // Toggle inline filter dropdowns
+    document.querySelectorAll('.filter-trigger').forEach(trigger => {
+        trigger.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const parent = trigger.closest('.inline-filter-dropdown');
+            
+            // Close all other dropdowns
+            document.querySelectorAll('.inline-filter-dropdown').forEach(dropdown => {
+                if (dropdown !== parent) {
+                    dropdown.classList.remove('active');
+                }
+            });
+            
+            parent.classList.toggle('active');
+        });
+    });
+
+    // Close dropdowns when clicking outside
+    document.addEventListener('click', () => {
+        document.querySelectorAll('.inline-filter-dropdown').forEach(dropdown => {
+            dropdown.classList.remove('active');
+        });
+    });
+
+    // Handle filter option clicks
+    document.querySelectorAll('.filter-option').forEach(item => {
+        item.addEventListener('click', (e) => {
+            e.stopPropagation();
+            const menu = item.closest('.inline-filter-dropdown');
+            
+            // Filter Role Action (Multi-select)
+            if (item.hasAttribute('data-value') && menu.id === 'role-filter-dropdown') {
+                const role = item.dataset.value;
+                
+                if (role === 'all') {
+                    filterState.roles = []; // clear selection
+                } else {
+                    if (filterState.roles.includes(role)) {
+                        filterState.roles = filterState.roles.filter(r => r !== role);
+                    } else {
+                        filterState.roles.push(role);
+                    }
+                }
+                
+                // Highlight active items
+                menu.querySelectorAll('.filter-option').forEach(el => {
+                    const elVal = el.dataset.value;
+                    if (elVal === 'all') {
+                        el.classList.toggle('active', filterState.roles.length === 0);
+                    } else {
+                        el.classList.toggle('active', filterState.roles.includes(elVal));
+                    }
+                });
+                
+                // Update trigger text
+                const trigger = menu.querySelector('.filter-trigger');
+                if (filterState.roles.length === 0) {
+                    trigger.innerHTML = `All Roles <span class="filter-chevron">▾</span>`;
+                } else if (filterState.roles.length === 1) {
+                    let singleRole = filterState.roles[0];
+                    if (singleRole === 'C-Suite') singleRole = 'C-Suite Only';
+                    trigger.innerHTML = `${singleRole} <span class="filter-chevron">▾</span>`;
+                } else {
+                    trigger.innerHTML = `${filterState.roles.length} Roles <span class="filter-chevron">▾</span>`;
+                }
+                
+                // Keep dropdown open for multi-select
+                renderTable();
+                return; // Stop execution here so it doesn't close the dropdown
+            }
+            
+            // Filter Value Action
+            if (item.hasAttribute('data-value') && menu.id === 'value-filter-dropdown') {
+                const val = parseFloat(item.dataset.value) || 0;
+                filterState.minValue = val;
+                
+                // Highlight active item
+                menu.querySelectorAll('.filter-option').forEach(el => {
+                    el.classList.toggle('active', parseFloat(el.dataset.value) === val);
+                });
+                
+                // Update trigger text
+                const triggerText = item.textContent;
+                const trigger = menu.querySelector('.filter-trigger');
+                trigger.innerHTML = `${triggerText} <span class="filter-chevron">▾</span>`;
+            }
+            
+            // Close dropdown
+            menu.classList.remove('active');
+            
+            renderTable();
         });
     });
 
     // Add refresh button handler
     document.getElementById('refresh-btn').addEventListener('click', loadData);
 
-    // Add cluster filter button handler
-    document.getElementById('cluster-filter-btn').addEventListener('click', sortByClusters);
+    // Add export button handler
+    document.getElementById('export-btn').addEventListener('click', exportToCSV);
 
-    // Add C-Suite toggle button handler
+    // Add C-Suite toggle button handler (at the top)
     const csuiteBtn = document.getElementById('csuite-filter-btn');
     if (csuiteBtn) {
         csuiteBtn.addEventListener('click', () => {
             cSuiteFilterActive = !cSuiteFilterActive;
-            csuiteBtn.classList.toggle('active', cSuiteFilterActive);
+            filterState.role = cSuiteFilterActive ? 'C-Suite' : 'all';
+            
+            // Update active state in Ticker inline dropdown
+            const roleMenu = document.getElementById('role-filter-dropdown');
+            if (roleMenu) {
+                roleMenu.querySelectorAll('.filter-option').forEach(el => {
+                    const isActive = el.dataset.value === filterState.role;
+                    el.classList.toggle('active', isActive);
+                    if (isActive) {
+                        const trigger = roleMenu.querySelector('.filter-trigger');
+                        trigger.innerHTML = `${el.textContent} <span class="filter-chevron">▾</span>`;
+                    }
+                });
+            }
             renderTable();
         });
     }
 
-    // Add export button handler
-    document.getElementById('export-btn').addEventListener('click', exportToCSV);
+    // Add Cluster Filter button handler (at the top)
+    const clusterBtn = document.getElementById('cluster-filter-btn');
+    if (clusterBtn) {
+        clusterBtn.addEventListener('click', () => {
+            if (filterState.cluster === 'clusters') {
+                filterState.cluster = 'all';
+            } else {
+                filterState.cluster = 'clusters';
+            }
+            renderTable();
+        });
+    }
+
+    // Bind Reset button
+    const resetBtn = document.getElementById('reset-filters-btn');
+    if (resetBtn) {
+        resetBtn.addEventListener('click', () => {
+            const searchInput = document.getElementById('search-input');
+            if (searchInput) searchInput.value = '';
+
+            filterState = {
+                primarySort: 'trade_date',
+                primarySortDir: 'desc',
+                secondarySort: 'value',
+                secondarySortDir: 'desc',
+                minValue: 0,
+                roles: [],
+                cluster: 'all'
+            };
+
+            cSuiteFilterActive = false;
+
+            // Reset active classes in filter dropdowns
+            document.querySelectorAll('.inline-filter-dropdown').forEach(menu => {
+                menu.querySelectorAll('.filter-option').forEach(item => {
+                    const isDefault = (item.dataset.value === 'all' || item.dataset.value === '0');
+                    item.classList.toggle('active', isDefault);
+                    if (isDefault) {
+                        const trigger = menu.querySelector('.filter-trigger');
+                        if (trigger) trigger.innerHTML = `${item.textContent} <span class="filter-chevron">▾</span>`;
+                    }
+                });
+            });
+
+            renderTable();
+        });
+    }
 });

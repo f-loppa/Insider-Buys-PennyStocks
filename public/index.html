@@ -14,12 +14,16 @@
 <body>
     <div class="container">
         <h1>🎯 Penny Stock Sniper</h1>
+        <div class="title-divider"></div>
         <div class="refresh-section">
-            <button id="refresh-btn" class="refresh-btn"><span class="refresh-icon">🔄</span> Refresh Data</button>
-            <button id="cluster-filter-btn" class="refresh-btn cluster-btn">🔥 Cluster Filter</button>
-            <button id="csuite-filter-btn" class="refresh-btn csuite-btn">👔 C-Suite</button>
-            <button id="export-btn" class="refresh-btn export-btn">💾 Export CSV</button>
-            <span id="last-updated" class="last-updated"></span>
+            <div class="refresh-buttons-group">
+                <button id="refresh-btn" class="refresh-btn"><span class="refresh-icon">🔄</span> Refresh Data</button>
+                <button id="cluster-filter-btn" class="refresh-btn cluster-btn">🔥 Cluster Filter</button>
+                <button id="export-btn" class="refresh-btn export-btn">💾 Export CSV</button>
+            </div>
+            <div class="last-updated-container">
+                <span id="last-updated" class="last-updated"></span>
+            </div>
         </div>
         
         <div class="search-section">
@@ -65,17 +69,49 @@
             </div>
         </div>
 
-        <!-- Main Table -->
+        <div class="table-controls" style="display: flex; justify-content: flex-end; width: 100%; margin-bottom: 0.75rem;">
+            <button id="reset-filters-btn" class="reset-filters-btn">Reset Filters</button>
+        </div>
+
         <table id="data-table" class="hidden">
             <thead>
                 <tr>
                     <th class="sortable" data-column="trade_date">Trade Date</th>
-                    <th class="sortable" data-column="ticker">Ticker</th>
+                    <th class="sortable" data-column="ticker">
+                        <div class="header-cell-content">
+                            <span>Ticker</span>
+                            <div class="inline-filter-dropdown" id="role-filter-dropdown">
+                                <div class="filter-trigger">All Roles <span class="filter-chevron">▾</span></div>
+                                <div class="filter-menu">
+                                    <div class="filter-option active" data-value="all">All Roles</div>
+                                    <div class="filter-option" data-value="CEO">CEO Only</div>
+                                    <div class="filter-option" data-value="CFO">CFO Only</div>
+                                    <div class="filter-option" data-value="C-Suite">C-Suite Only</div>
+                                    <div class="filter-option" data-value="DIR">Director Only</div>
+                                    <div class="filter-option" data-value="10%">10% Owner Only</div>
+                                </div>
+                            </div>
+                        </div>
+                    </th>
                     <th class="sortable" data-column="company">Company</th>
                     <th class="sortable" data-column="price">Price</th>
                     <th class="sortable" data-column="shares">Shares</th>
-
-                    <th class="sortable" data-column="value">Value</th>
+                    <th class="sortable" data-column="value">
+                        <div class="header-cell-content">
+                            <span>Value</span>
+                            <div class="inline-filter-dropdown" id="value-filter-dropdown">
+                                <div class="filter-trigger">All Value <span class="filter-chevron">▾</span></div>
+                                <div class="filter-menu right-aligned">
+                                    <div class="filter-option active" data-value="0">All Value</div>
+                                    <div class="filter-option" data-value="10000">&gt; $10k</div>
+                                    <div class="filter-option" data-value="50000">&gt; $50k</div>
+                                    <div class="filter-option" data-value="100000">&gt; $100k</div>
+                                    <div class="filter-option" data-value="500000">&gt; $500k</div>
+                                    <div class="filter-option" data-value="1000000">&gt; $1M</div>
+                                </div>
+                            </div>
+                        </div>
+                    </th>
                 </tr>
             </thead>
             <tbody></tbody>
